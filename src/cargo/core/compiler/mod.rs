@@ -912,6 +912,9 @@ fn build_base_args<'a, 'cfg>(
 
     if let CompileKind::Target(n) = unit.kind {
         cmd.arg("--target").arg(n.rustc_target());
+    } else {
+	debug!("kind is {:?} - Forcing this to be 686", unit.kind);
+        cmd.arg("--target").arg("i686-unknown-linux-gnu");
     }
 
     opt(
