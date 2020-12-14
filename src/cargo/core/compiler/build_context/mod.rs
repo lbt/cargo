@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str;
 
+use log::debug;
+
 mod target_info;
 pub use self::target_info::{FileFlavor, RustcTargetData, TargetInfo};
 
@@ -67,11 +69,15 @@ impl<'a, 'cfg> BuildContext<'a, 'cfg> {
 
     /// Gets the user-specified linker for a particular host or target.
     pub fn linker(&self, kind: CompileKind) -> Option<PathBuf> {
-        self.target_data
+	debug!("Looking for linker for {:?}", kind);
+        let linker =
+	    self.target_data
             .target_config(kind)
             .linker
             .as_ref()
-            .map(|l| l.val.clone().resolve_program(self.config))
+            .map(|l| l.val.clone().resolve_program(self.config));
+	debug!("Linker is {:?}", &linker);
+	linker
     }
 
     /// Gets the host architecture triple.

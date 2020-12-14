@@ -10,6 +10,8 @@ use std::env;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 
+use log::debug;
+
 /// Information about the platform target gleaned from querying rustc.
 ///
 /// `RustcTargetData` keeps two of these, one for the host and one for the
@@ -108,6 +110,7 @@ impl TargetInfo {
         let supports_embed_bitcode = Some(false);
 
         if let CompileKind::Target(target) = kind {
+	    debug!("Adding a target because this is a CK:Target {}", target.rustc_target());
             process.arg("--target").arg(target.rustc_target());
         }
 
@@ -453,6 +456,7 @@ fn env_args(
         CompileKind::Target(target) => target.short_name(),
     };
     let key = format!("target.{}.{}", target, name);
+    debug!("Looking for config key {} for rustflags", key);
     if let Some(args) = config.get::<Option<StringList>>(&key)? {
         rustflags.extend(args.as_slice().iter().cloned());
     }
@@ -518,6 +522,7 @@ impl RustcTargetData {
         let mut target_info = HashMap::new();
         if let CompileKind::Target(target) = requested_kind {
             let tcfg = config.target_cfg_triple(target.short_name())?;
+	    debug!("Inserting target info for {:?}", tcfg);
             target_config.insert(target, tcfg);
             target_info.insert(
                 target,
@@ -553,7 +558,9 @@ impl RustcTargetData {
             None => return true,
         };
         let name = self.short_name(&kind);
-        platform.matches(name, self.cfg(kind))
+        let res = platform.matches(name, self.cfg(kind));
+	debug!("dep_platform_activated {}", res);
+	res
     }
 
     /// Gets the list of `cfg`s printed out from the compiler for the specified kind.

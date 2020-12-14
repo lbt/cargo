@@ -25,7 +25,7 @@ use crate::core::resolver::Resolve;
 use crate::core::{InternedString, Package, PackageId, Target};
 use crate::ops::resolve_all_features;
 use crate::CargoResult;
-use log::trace;
+use log::{trace, debug};
 use std::collections::{HashMap, HashSet};
 
 /// Collection of stuff used while creating the `UnitGraph`.
@@ -268,6 +268,7 @@ fn compute_deps<'a, 'cfg>(
             let unit_dep =
                 new_unit_dep(state, unit, pkg, lib, dep_unit_for, CompileKind::Host, mode)?;
             ret.push(unit_dep);
+	    debug!("Adding dependency for proc_macro I think");
         } else {
             let unit_dep = new_unit_dep(
                 state,

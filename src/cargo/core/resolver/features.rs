@@ -46,7 +46,7 @@ use crate::core::{FeatureValue, InternedString, PackageId, PackageIdSpec, Packag
 use crate::util::{CargoResult, Config};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
-
+use log::debug;
 /// Map of activated features.
 ///
 /// The key is `(PackageId, bool)` where the bool is `true` if these
@@ -524,11 +524,13 @@ impl<'a, 'cfg> FeatureResolver<'a, 'cfg> {
             // Host. If we are computing dependencies "for a build script",
             // even normal dependencies are host-only.
             if for_host || dep.is_build() {
+		debug!("Building for host for_host={} dep.is_build={}", for_host, dep.is_build());
                 return self
                     .target_data
                     .dep_platform_activated(dep, CompileKind::Host);
             }
             // Not a build dependency, and not for a build script, so must be Target.
+	    debug!("Building for target");
             self.target_data
                 .dep_platform_activated(dep, self.requested_target)
         };
