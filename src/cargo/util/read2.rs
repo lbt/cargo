@@ -54,6 +54,9 @@ mod imp {
 		    };
 		    debug!("lbt (pid:{}) poll timout and child is{} alive", child.id(),
 			   if child_is_alive {""} else {" no longer"});
+		    if !child_is_alive {
+			return Ok(()); // same as nfds == 0
+		    }
 		}
 		rr
 	    };
