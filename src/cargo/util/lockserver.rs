@@ -62,9 +62,11 @@ impl LockServer {
     pub fn start(self) -> Result<LockServerStarted, Error> {
         let addr = self.addr;
         let done = self.done.clone();
-        let thread = thread::spawn(|| {
-            self.run();
-        });
+        let thread = thread::Builder::new()
+	    .name("cargo Lockserver".to_string())
+	    .spawn(|| {
+		self.run();
+            }).unwrap();
         Ok(LockServerStarted {
             addr,
             thread: Some(thread),

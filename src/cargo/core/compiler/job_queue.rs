@@ -852,7 +852,7 @@ impl<'a, 'cfg> DrainState<'a, 'cfg> {
             Freshness::Fresh => self.timings.add_fresh(),
             Freshness::Dirty => self.timings.add_dirty(),
         }
-        scope.spawn(move |_| doit());
+        scope.builder().name("cargo doit".to_string()).spawn(move |_| doit()).unwrap();
 
         Ok(())
     }
