@@ -56,6 +56,7 @@ use std::marker;
 use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
+use std::process;
 
 use anyhow::format_err;
 use crossbeam_utils::thread::Scope;
@@ -623,7 +624,7 @@ impl<'a, 'cfg> DrainState<'a, 'cfg> {
         if events.is_empty() {
             loop {
                 self.tick_progress();
-		debug!("tick");
+		debug!("tick {}", process::id());
                 self.tokens.truncate(self.active.len() - 1);
                 match self.messages.pop(Duration::from_millis(500)) {
                     Some(message) => {
