@@ -1,4 +1,4 @@
-use crate::util::{process_error, read2, CargoResult, CargoResultExt};
+use crate::util::{process_error, read2a, CargoResult, CargoResultExt};
 use anyhow::bail;
 use jobserver::Client;
 use shell_escape::escape;
@@ -9,6 +9,7 @@ use std::fmt;
 use std::iter::once;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
+use log::debug;
 
 /// A builder object for an external process, similar to `std::process::Command`.
 #[derive(Clone, Debug)]
@@ -151,9 +152,11 @@ impl ProcessBuilder {
     /// Runs the process, waiting for completion, and mapping non-success exit codes to an error.
     pub fn exec(&self) -> CargoResult<()> {
         let mut command = self.build_command();
+	debug!("lbt status() calling for {:?}", command);
         let exit = command.status().chain_err(|| {
             process_error(&format!("could not execute process {}", self), None, None)
         })?;
+	debug!("lbt status() returned for {:?}", command);
 
         if exit.success() {
             Ok(())
@@ -232,9 +235,12 @@ impl ProcessBuilder {
         let mut callback_error = None;
         let status = (|| {
             let mut child = cmd.spawn()?;
+	    let child_id = child.id();
+	    debug!("lbt Spawned pid:{:?} for {:?} capture: {}", child_id, cmd, capture_output);
             let out = child.stdout.take().unwrap();
             let err = child.stderr.take().unwrap();
-            read2(out, err, &mut |is_out, data, eof| {
+            read2a(out, err, &mut child, &mut |is_out, data, eof| {
+		debug!("lbt (pid:{:?}) Got some {} read2a", child_id, if is_out {"out"} else {"err"});
                 let idx = if eof {
                     data.len()
                 } else {
@@ -243,6 +249,7 @@ impl ProcessBuilder {
                         None => return,
                     }
                 };
+		debug!("lbt (pid:{:?}) idx {}", child_id, idx);
                 {
                     // scope for new_lines
                     let new_lines = if capture_output {
@@ -256,23 +263,36 @@ impl ProcessBuilder {
                     };
                     for line in String::from_utf8_lossy(new_lines).lines() {
                         if callback_error.is_some() {
+			    debug!("lbt (pid:{:?}) callback error set, not trying any more", child_id);
                             break;
                         }
                         let callback_result = if is_out {
-                            on_stdout_line(line)
+			    debug!("lbt (pid:{:?}) stdout callback", child_id);
+                            let res = on_stdout_line(line);
+			    debug!("lbt (pid:{:?}) stdout callback done", child_id);
+			    res
                         } else {
-                            on_stderr_line(line)
+			    debug!("lbt (pid:{:?}) stderr callback", child_id);
+                            let res = on_stderr_line(line);
+			    debug!("lbt (pid:{:?}) stderr callback done", child_id);
+			    res
                         };
                         if let Err(e) = callback_result {
+			    debug!("lbt (pid:{:?}) callback error: {}", child_id, e);
                             callback_error = Some(e);
                         }
                     }
                 }
                 if !capture_output {
+		    debug!("lbt (pid:{:?}) draining", child_id);
                     data.drain(..idx);
+		    debug!("lbt (pid:{:?}) drained", child_id);
                 }
             })?;
-            child.wait()
+	    debug!("lbt Waiting for pid:{:?}", child_id);
+            let res = child.wait();
+	    debug!("lbt Waited for pid:{:?}", child_id);
+	    res
         })()
         .chain_err(|| process_error(&format!("could not execute process {}", self), None, None))?;
         let output = Output {
@@ -377,9 +397,11 @@ mod imp {
     use crate::util::{process_error, ProcessBuilder};
     use crate::CargoResult;
     use std::os::unix::process::CommandExt;
-
+    use log::debug;
+    
     pub fn exec_replace(process_builder: &ProcessBuilder) -> CargoResult<()> {
         let mut command = process_builder.build_command();
+	debug!("About to execvp {:?}", process_builder);
         let error = command.exec();
         Err(anyhow::Error::from(error)
             .context(process_error(

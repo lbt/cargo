@@ -20,6 +20,7 @@ pub use self::process_builder::{process, ProcessBuilder};
 pub use self::progress::{Progress, ProgressStyle};
 pub use self::queue::Queue;
 pub use self::read2::read2;
+pub use self::read2::read2a;
 pub use self::restricted_names::validate_package_name;
 pub use self::rustc::Rustc;
 pub use self::sha256::Sha256;
