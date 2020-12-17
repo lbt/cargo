@@ -49,13 +49,11 @@ mod imp {
 			Ok(Some(_status)) => false,
 			Ok(None) => true,
 			Err(e) => { debug!("error attempting to wait: {}", e);
-				    false }
+				    return Err(e);
+			}
 		    };
 		    debug!("lbt (pid:{}) poll timout and child is{} alive", child.id(),
 			   if child_is_alive {""} else {" no longer"});
-		    if !child_is_alive {
-			return Ok(());
-		    }
 		}
 		rr
 	    };
