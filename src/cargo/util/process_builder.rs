@@ -1,4 +1,4 @@
-use crate::util::{process_error, read2a, CargoResult, CargoResultExt};
+use crate::util::{process_error, read2, CargoResult, CargoResultExt};
 use anyhow::bail;
 use jobserver::Client;
 use shell_escape::escape;
@@ -240,8 +240,8 @@ impl ProcessBuilder {
 	    debug!("lbt Spawned pid:{:?} for {:?} capture: {}", child_id, cmd, capture_output);
             let out = child.stdout.take().unwrap();
             let err = child.stderr.take().unwrap();
-	    //let resr2 = read2(out, err, &mut |is_out, data, eof| {
-            let resr2 = read2a(out, err, &mut child, &mut |is_out, data, eof| {
+	    read2(out, err, &mut |is_out, data, eof| {
+            //let resr2 = read2a(out, err, &mut child, &mut |is_out, data, eof| {
 		debug!("lbt (pid:{:?}) Got some {} read2a", child_id, if is_out {"out"} else {"err"});
                 let idx = if eof {
                     data.len()
@@ -290,16 +290,17 @@ impl ProcessBuilder {
                     data.drain(..idx);
 		    debug!("lbt (pid:{:?}) drained", child_id);
                 }
-            });
+            })?;
 	    debug!("lbt Waiting for pid:{:?}", child_id);
-            let res = child.wait();
-	    debug!("lbt Waited for pid:{:?}", child_id);
-	    match resr2 {
- 		Ok(_b) => res,
-		Err(e) => {
-		    debug!("lbt (pid:{:?}) Caught error in read2", child_id);
-		    Err(e) },
-	    }
+	    child.wait()
+            // let res = child.wait();
+	    // debug!("lbt Waited for pid:{:?}", child_id);
+	    // match resr2 {
+ 	    // 	Ok(_b) => res,
+	    // 	Err(e) => {
+	    // 	    debug!("lbt (pid:{:?}) Caught error in read2", child_id);
+	    // 	    Err(e) },
+	    // }
         })()
         .chain_err(|| process_error(&format!("could not execute process {}", self), None, None))?;
         let output = Output {
