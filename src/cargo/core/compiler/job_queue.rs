@@ -499,7 +499,7 @@ impl<'a, 'cfg> DrainState<'a, 'cfg> {
                 cx.bcx
                     .config
                     .shell()
-                    .verbose(|c| c.status("Running (lbt)", &cmd))?;
+                    .verbose(|c| c.status("Running", &cmd))?;
                 self.timings.unit_start(id, self.active[&id]);
             }
             Message::BuildPlanMsg(module_name, cmd, filenames) => {

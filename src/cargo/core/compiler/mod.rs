@@ -23,6 +23,7 @@ use std::fs::{self, File};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::process;
 
 use anyhow::Error;
 use lazycell::LazyCell;
@@ -282,6 +283,7 @@ fn rustc<'a, 'cfg>(
         if build_plan {
             state.build_plan(buildkey, rustc.clone(), outputs.clone());
         } else {
+	    debug!("lbt({}): about to exec.exec rustc", process::id());
             exec.exec(
                 rustc,
                 package_id,

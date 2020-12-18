@@ -8,6 +8,7 @@ mod imp {
     use std::mem;
     use std::os::unix::prelude::*;
     use std::process::{Child, ChildStderr, ChildStdout};
+    use std::process;
     use log::debug;
 
     pub fn read2a(
@@ -123,12 +124,14 @@ mod imp {
 
         while nfds > 0 {
             // wait for either pipe to become readable using `select`
+	    debug!("lbt (pid:{}) wait for read2 poll", process::id());
             let r = unsafe { libc::poll(fds.as_mut_ptr(), nfds, -1) };
             if r == -1 {
                 let err = io::Error::last_os_error();
                 if err.kind() == io::ErrorKind::Interrupted {
                     continue;
                 }
+		debug!("lbt (pid:{}) read2 returns Err", process::id());
                 return Err(err);
             }
 
@@ -143,6 +146,8 @@ mod imp {
                     if e.kind() == io::ErrorKind::WouldBlock {
                         Ok(false)
                     } else {
+			// This does return because the handle call below is ?'ed
+			debug!("lbt (pid:{}) read2 returns Err", process::id());
                         Err(e)
                     }
                 }
@@ -160,6 +165,7 @@ mod imp {
             }
             data(true, &mut out, out_done);
         }
+	debug!("lbt (pid:{}) read2 returns OK", process::id());
         Ok(())
     }
 }
