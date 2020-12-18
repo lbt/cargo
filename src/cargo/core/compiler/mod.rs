@@ -95,8 +95,11 @@ impl Executor for DefaultExecutor {
         on_stdout_line: &mut dyn FnMut(&str) -> CargoResult<()>,
         on_stderr_line: &mut dyn FnMut(&str) -> CargoResult<()>,
     ) -> CargoResult<()> {
-        cmd.exec_with_streaming(on_stdout_line, on_stderr_line, false)
-            .map(drop)
+	debug!("lbt (pid:{:?}) about to exec_with_streaming: {:?}", process::id(), cmd);
+        let res = cmd.exec_with_streaming(on_stdout_line, on_stderr_line, false)
+            .map(drop);
+	debug!("lbt (pid:{:?}) Done exec_with_streaming: {:?}", process::id(), cmd);
+	res
     }
 }
 

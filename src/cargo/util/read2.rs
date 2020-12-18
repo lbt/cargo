@@ -37,7 +37,8 @@ mod imp {
 	let mut child_is_alive: bool = match child.try_wait() {
 	    Ok(Some(_status)) => false,
 	    Ok(None) => true,
-	    Err(e) => { debug!("error attempting to wait: {}", e);
+	    Err(e) => { debug!("lbt (pid:{}) error attempting to wait for {} : {}",
+			       process::id(), child.id(), e);
 			false }
 	};
 
@@ -49,11 +50,14 @@ mod imp {
 		    child_is_alive = match child.try_wait() {
 			Ok(Some(_status)) => false,
 			Ok(None) => true,
-			Err(e) => { debug!("error attempting to wait: {}", e);
-				    return Err(e);
+			Err(e) => {
+			    debug!("lbt (pid:{}) error attempting to wait for {} : {}",
+				   process::id(), child.id(), e);
+			    return Err(e);
 			}
 		    };
-		    debug!("lbt (pid:{}) poll timout and child is{} alive", child.id(),
+		    debug!("lbt (pid:{}) poll timout and child pid:{} is{} alive",
+			   process::id(), child.id(),
 			   if child_is_alive {""} else {" no longer"});
 		    if !child_is_alive {
 			return Ok(()); // same as nfds == 0
