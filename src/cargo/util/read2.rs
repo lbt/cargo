@@ -1,5 +1,6 @@
 pub use self::imp::read2;
 pub use self::imp::read2a;
+pub use self::imp::read2b;
 
 #[cfg(unix)]
 mod imp {
@@ -37,7 +38,7 @@ mod imp {
 	let mut child_is_alive: bool = match child.try_wait() {
 	    Ok(Some(_status)) => false,
 	    Ok(None) => true,
-	    Err(e) => { debug!("lbt (pid:{}) error attempting to wait for {} : {}",
+	    Err(e) => { debug!("lbt (pid:{}) read2a error attempting to pre-wait for {} : {}",
 			       process::id(), child.id(), e);
 			false }
 	};
@@ -51,12 +52,12 @@ mod imp {
 			Ok(Some(_status)) => false,
 			Ok(None) => true,
 			Err(e) => {
-			    debug!("lbt (pid:{}) error attempting to wait for {} : {}",
+			    debug!("lbt (pid:{}) read2a error attempting to wait for {} : {}",
 				   process::id(), child.id(), e);
 			    return Err(e);
 			}
 		    };
-		    debug!("lbt (pid:{}) poll timout and child pid:{} is{} alive",
+		    debug!("lbt (pid:{}) read2a poll timout and child pid:{} is{} alive",
 			   process::id(), child.id(),
 			   if child_is_alive {""} else {" no longer"});
 		    if !child_is_alive {
@@ -84,6 +85,8 @@ mod imp {
                     if e.kind() == io::ErrorKind::WouldBlock {
                         Ok(false)
                     } else {
+			// This does return because the handle call below is ?'ed
+			debug!("lbt (pid:{}) read2a returns Err while draining", process::id());
                         Err(e)
                     }
                 }
@@ -101,8 +104,94 @@ mod imp {
             }
             data(true, &mut out, out_done);
         }
+	debug!("lbt (pid:{}) read2a returns OK", process::id());
         Ok(())
     }
+    pub fn read2b(
+        mut out_pipe: ChildStdout,
+        mut err_pipe: ChildStderr,
+        child: &mut Child,
+        data: &mut dyn FnMut(bool, &mut Vec<u8>, bool),
+    ) -> io::Result<()> {
+        unsafe {
+            libc::fcntl(out_pipe.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK);
+            libc::fcntl(err_pipe.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK);
+        }
+
+        let mut out_done = false;
+        let mut err_done = false;
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+
+        let mut fds: [libc::pollfd; 2] = unsafe { mem::zeroed() };
+        fds[0].fd = out_pipe.as_raw_fd();
+        fds[0].events = libc::POLLIN;
+        fds[1].fd = err_pipe.as_raw_fd();
+        fds[1].events = libc::POLLIN;
+        let mut nfds = 2;
+        let mut errfd = 1;
+	let child_id = child.id();
+	let mut _child_is_alive: bool = match child.try_wait() {
+	    Ok(Some(_status)) => false,
+	    Ok(None) => true,
+	    Err(e) => { debug!("lbt (pid:{}) read2b error attempting to pre-wait() for {} : {}",
+			       process::id(), child_id, e);
+			false }
+	};
+
+        while nfds > 0 {
+            // wait for either pipe to become readable using `select`
+ 	    debug!("lbt (pid:{}) waiting for read2b poll for {}", process::id(), child_id);
+            let r = unsafe {
+		let mut rr;
+		while {rr = libc::poll(fds.as_mut_ptr(), nfds, 500); rr == 0} {
+		    debug!("lbt (pid:{}) read2b polling timout for child pid:{}",
+			   process::id(), child_id);
+		}
+		rr
+	    };
+            if r == -1 {
+                let err = io::Error::last_os_error();
+                if err.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+		debug!("lbt (pid:{}) read2b returns Err for child {}", process::id(), child_id);
+                return Err(err);
+            }
+
+            // Read as much as we can from each pipe, ignoring EWOULDBLOCK or
+            // EAGAIN. If we hit EOF, then this will happen because the underlying
+            // reader will return Ok(0), in which case we'll see `Ok` ourselves. In
+            // this case we flip the other fd back into blocking mode and read
+            // whatever's leftover on that file descriptor.
+            let handle = |res: io::Result<_>| match res {
+                Ok(_) => Ok(true),
+                Err(e) => {
+                    if e.kind() == io::ErrorKind::WouldBlock {
+                        Ok(false)
+                    } else {
+			// This does return because the handle call below is ?'ed
+			debug!("lbt (pid:{}) read2b returns Err for child {} while draining", process::id(), child_id);
+                        Err(e)
+                    }
+                }
+            };
+            if !err_done && fds[errfd].revents != 0 && handle(err_pipe.read_to_end(&mut err))? {
+                err_done = true;
+                nfds -= 1;
+            }
+            data(false, &mut err, err_done);
+            if !out_done && fds[0].revents != 0 && handle(out_pipe.read_to_end(&mut out))? {
+                out_done = true;
+                fds[0].fd = err_pipe.as_raw_fd();
+                errfd = 0;
+                nfds -= 1;
+            }
+            data(true, &mut out, out_done);
+    }
+    debug!("lbt (pid:{}) read2b returns OK for child {}", process::id(), child_id);
+    Ok(())
+}
     pub fn read2(
         mut out_pipe: ChildStdout,
         mut err_pipe: ChildStderr,
@@ -151,7 +240,7 @@ mod imp {
                         Ok(false)
                     } else {
 			// This does return because the handle call below is ?'ed
-			debug!("lbt (pid:{}) read2 returns Err", process::id());
+			debug!("lbt (pid:{}) read2 returns Err while draining", process::id());
                         Err(e)
                     }
                 }

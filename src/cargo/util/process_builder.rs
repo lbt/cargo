@@ -1,4 +1,4 @@
-use crate::util::{process_error, read2, CargoResult, CargoResultExt};
+use crate::util::{process_error, read2b, CargoResult, CargoResultExt};
 use anyhow::bail;
 use jobserver::Client;
 use shell_escape::escape;
@@ -11,6 +11,7 @@ use std::path::Path;
 use std::process::{Command, Output, Stdio};
 use log::debug;
 use std::process;
+use std::thread;
 
 /// A builder object for an external process, similar to `std::process::Command`.
 #[derive(Clone, Debug)]
@@ -194,11 +195,11 @@ impl ProcessBuilder {
     pub fn exec_with_output(&self) -> CargoResult<Output> {
         let mut command = self.build_command();
 
-	debug!("lbt (pid:{:?}) about to exec_with_output: {:?}", process::id(), command);
+	debug!("lbt (pid:{:?}/{:?}) about to exec_with_output: {:?}", process::id(), thread::current().id(), command);
         let output = command.output().chain_err(|| {
             process_error(&format!("could not execute process {}", self), None, None)
         })?;
-	debug!("lbt (pid:{:?}) done exec_with_output: {:?}", process::id(), command);
+	debug!("lbt (pid:{:?}/{:?}) done exec_with_output: {:?}", process::id(), thread::current().id(), command);
 
         if output.status.success() {
             Ok(output)
@@ -238,12 +239,13 @@ impl ProcessBuilder {
         let mut callback_error = None;
         let status = (|| {
             let mut child = cmd.spawn()?;
-	    debug!("lbt (pid:{:?} Spawned pid:{:?} for {:?} capture: {}", process::id(), child.id(), cmd, capture_output);
+	    let child_id = child.id();
+	    debug!("lbt (pid:{:?}/{:?} Spawned pid:{:?}/{:?} for {:?} capture: {}", process::id(), thread::current().id(), child_id, cmd, capture_output);
             let out = child.stdout.take().unwrap();
             let err = child.stderr.take().unwrap();
-	    read2(out, err, &mut |is_out, data, eof| {
-            //let resr2 = read2a(out, err, &mut child, &mut |is_out, data, eof| {
-		debug!("lbt (pid:{:?}) Got some {} read2a", process::id(), if is_out {"out"} else {"err"});
+	    //read2(out, err, &mut |is_out, data, eof| {
+            read2b(out, err, &mut child, &mut |is_out, data, eof| {
+		debug!("lbt (pid:{:?}/{:?}) Got some {} read2b from child {}", process::id(), thread::current().id(), if is_out {"out"} else {"err"}, child_id);
                 let idx = if eof {
                     data.len()
                 } else {
@@ -252,7 +254,7 @@ impl ProcessBuilder {
                         None => return,
                     }
                 };
-		debug!("lbt (pid:{:?}) idx {}", process::id(), idx);
+		debug!("lbt (pid:{:?}/{:?}) idx {}", process::id(), thread::current().id(), idx);
                 {
                     // scope for new_lines
                     let new_lines = if capture_output {
@@ -266,40 +268,41 @@ impl ProcessBuilder {
                     };
                     for line in String::from_utf8_lossy(new_lines).lines() {
                         if callback_error.is_some() {
-			    debug!("lbt (pid:{:?}) callback error set, not trying any more", process::id());
+			    debug!("lbt (pid:{:?}/{:?}) callback error set, not trying any more", process::id(), thread::current().id());
                             break;
                         }
                         let callback_result = if is_out {
-			    debug!("lbt (pid:{:?}) stdout callback", process::id());
+			    debug!("lbt (pid:{:?}/{:?}) stdout callback from child {}", process::id(), thread::current().id(), child_id);
                             let res = on_stdout_line(line);
-			    debug!("lbt (pid:{:?}) stdout callback done", process::id());
+			    debug!("lbt (pid:{:?}/{:?}) stdout callback from child {} done", process::id(), thread::current().id(), child_id);
 			    res
                         } else {
-			    debug!("lbt (pid:{:?}) stderr callback", process::id());
+			    debug!("lbt (pid:{:?}/{:?}) stderr callback from child {}", process::id(), thread::current().id(), child_id);
                             let res = on_stderr_line(line);
-			    debug!("lbt (pid:{:?}) stderr callback done", process::id());
+			    debug!("lbt (pid:{:?}/{:?}) stderr callback from child {} done", process::id(), thread::current().id(), child_id);
 			    res
                         };
                         if let Err(e) = callback_result {
-			    debug!("lbt (pid:{:?}) callback error: {}", process::id(), e);
+			    debug!("lbt (pid:{:?}/{:?}) from child {} callback error: {}", process::id(), thread::current().id(), child_id, e);
                             callback_error = Some(e);
                         }
                     }
                 }
                 if !capture_output {
-		    debug!("lbt (pid:{:?}) draining", process::id());
+		    debug!("lbt (pid:{:?}/{:?}) draining child {}", process::id(), thread::current().id(), child_id);
                     data.drain(..idx);
-		    debug!("lbt (pid:{:?}) drained", process::id());
+		    debug!("lbt (pid:{:?}/{:?}) drained child {}", process::id(), thread::current().id(), child_id);
                 }
             })?;
-	    debug!("lbt (pid:{:?}) Waiting for pid:{:?}", process::id(), child.id());
-	    child.wait()
-            // let res = child.wait();
-	    // debug!("lbt Waited for pid:{:?}", process::id());
-	    // match resr2 {
+	    debug!("lbt (pid:{:?}/{:?}) Waiting for pid:{:?}/{:?}", process::id(), thread::current().id(), child_id);
+	    //child.wait()
+            let res = child.wait();
+	    debug!("lbt (pid:{:?}/{:?}) Waited for pid:{:?}/{:?}", process::id(), thread::current().id(), child_id);
+	    res
+	    //match resr2 {
  	    // 	Ok(_b) => res,
 	    // 	Err(e) => {
-	    // 	    debug!("lbt (pid:{:?}) Caught error in read2", process::id());
+	    // 	    debug!("lbt (pid:{:?}/{:?}) Caught error in read2", process::id(), thread::current().id());
 	    // 	    Err(e) },
 	    // }
         })()
