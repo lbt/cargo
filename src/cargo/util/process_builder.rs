@@ -240,12 +240,12 @@ impl ProcessBuilder {
         let status = (|| {
             let mut child = cmd.spawn()?;
 	    let child_id = child.id();
-	    debug!("lbt (pid:{:?}/{:?} Spawned pid:{:?}/{:?} for {:?} capture: {}", process::id(), thread::current().id(), child_id, cmd, capture_output);
+	    debug!("lbt (pid:{:?}/{:?} Spawned pid:{:?} for {:?} capture: {}", process::id(), thread::current().id(), child_id, cmd, capture_output);
             let out = child.stdout.take().unwrap();
             let err = child.stderr.take().unwrap();
 	    //read2(out, err, &mut |is_out, data, eof| {
             read2b(out, err, &mut child, &mut |is_out, data, eof| {
-		debug!("lbt (pid:{:?}/{:?}) Got some {} read2b from child {}", process::id(), thread::current().id(), if is_out {"out"} else {"err"}, child_id);
+		debug!("lbt (pid:{:?}/{:?}) Got some {} read2b from child {}. Eof={}", process::id(), thread::current().id(), if is_out {"out"} else {"err"}, child_id, eof);
                 let idx = if eof {
                     data.len()
                 } else {
@@ -293,11 +293,11 @@ impl ProcessBuilder {
                     data.drain(..idx);
 		    debug!("lbt (pid:{:?}/{:?}) drained child {}", process::id(), thread::current().id(), child_id);
                 }
-            })?;
-	    debug!("lbt (pid:{:?}/{:?}) Waiting for pid:{:?}/{:?}", process::id(), thread::current().id(), child_id);
+            })?;  // this is the call to read2... note the ?
+	    debug!("lbt (pid:{:?}/{:?}) Waiting for pid:{:?}", process::id(), thread::current().id(), child_id);
 	    //child.wait()
             let res = child.wait();
-	    debug!("lbt (pid:{:?}/{:?}) Waited for pid:{:?}/{:?}", process::id(), thread::current().id(), child_id);
+	    debug!("lbt (pid:{:?}/{:?}) Waited for pid:{:?}", process::id(), thread::current().id(), child_id);
 	    res
 	    //match resr2 {
  	    // 	Ok(_b) => res,

@@ -11,6 +11,7 @@ mod imp {
     use std::process::{Child, ChildStderr, ChildStdout};
     use std::process;
     use log::debug;
+    use std::thread;
 
     pub fn read2a(
         mut out_pipe: ChildStdout,
@@ -130,23 +131,25 @@ mod imp {
         fds[1].events = libc::POLLIN;
         let mut nfds = 2;
         let mut errfd = 1;
+	let process_id = process::id();
+	let thread_id = thread::current().id();
 	let child_id = child.id();
 	let mut _child_is_alive: bool = match child.try_wait() {
 	    Ok(Some(_status)) => false,
 	    Ok(None) => true,
-	    Err(e) => { debug!("lbt (pid:{}) read2b error attempting to pre-wait() for {} : {}",
-			       process::id(), child_id, e);
+	    Err(e) => { debug!("lbt (pid:{}/{:?}) read2b error attempting to pre-wait() for {} : {}",
+			       process_id, thread_id, child_id, e);
 			false }
 	};
 
         while nfds > 0 {
             // wait for either pipe to become readable using `select`
- 	    debug!("lbt (pid:{}) waiting for read2b poll for {}", process::id(), child_id);
+ 	    debug!("lbt (pid:{}/{:?}) waiting for read2b poll for {}", process_id, thread_id, child_id);
             let r = unsafe {
 		let mut rr;
 		while {rr = libc::poll(fds.as_mut_ptr(), nfds, 500); rr == 0} {
-		    debug!("lbt (pid:{}) read2b polling timout for child pid:{}",
-			   process::id(), child_id);
+		    debug!("lbt (pid:{}/{:?}) read2b polling timout for child pid:{}",
+			   process_id, thread_id, child_id);
 		}
 		rr
 	    };
@@ -155,7 +158,7 @@ mod imp {
                 if err.kind() == io::ErrorKind::Interrupted {
                     continue;
                 }
-		debug!("lbt (pid:{}) read2b returns Err for child {}", process::id(), child_id);
+		debug!("lbt (pid:{}/{:?}) read2b returns Err for child {}", process_id, thread_id, child_id);
                 return Err(err);
             }
 
@@ -171,7 +174,7 @@ mod imp {
                         Ok(false)
                     } else {
 			// This does return because the handle call below is ?'ed
-			debug!("lbt (pid:{}) read2b returns Err for child {} while draining", process::id(), child_id);
+			debug!("lbt (pid:{}/{:?}) read2b returns Err for child {} while draining", process_id, thread_id, child_id);
                         Err(e)
                     }
                 }
@@ -189,7 +192,7 @@ mod imp {
             }
             data(true, &mut out, out_done);
     }
-    debug!("lbt (pid:{}) read2b returns OK for child {}", process::id(), child_id);
+    debug!("lbt (pid:{}/{:?}) read2b returns OK for child {}", process_id, thread_id, child_id);
     Ok(())
 }
     pub fn read2(
